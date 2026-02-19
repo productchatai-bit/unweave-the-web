@@ -28,6 +28,28 @@ function initTurndown(): TurndownService {
   return td;
 }
 
+/**
+ * Returns true if the HTML is a JavaScript SPA shell with no real readable content
+ * (e.g. Inertia.js, Next.js, React apps that render client-side only).
+ */
+function isSpaShell(html: string): boolean {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  // Remove scripts/styles before measuring text
+  doc.querySelectorAll("script, style, noscript, meta, link").forEach((el) => el.remove());
+  const textContent = (doc.body?.innerText ?? "").trim();
+  // If there's very little visible text (< 150 chars), it's likely a shell
+  if (textContent.length < 150) return true;
+  // Common SPA mount patterns with no content
+  const bodyHtml = doc.body?.innerHTML ?? "";
+  const spaPatterns = [
+    /<div[^>]+id=["']app["'][^>]*>\s*<\/div>/i,
+    /<div[^>]+id=["']root["'][^>]*>\s*<\/div>/i,
+    /<div[^>]+id=["']__next["'][^>]*>\s*<\/div>/i,
+    /data-page=["'][^"']+["']/i, // Inertia.js
+  ];
+  return spaPatterns.some((p) => p.test(bodyHtml));
+}
+
 function cleanHtmlToMarkdown(html: string, sourceUrl: string, layersTriedCount: number): string {
   const td = initTurndown();
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -93,10 +115,10 @@ export async function scrapeUrl(
   // Layer 1 — AllOrigins
   updateLayer(0, "trying");
   try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodedURL}`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodedURL}`, { signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const data = await res.json();
-      if (data?.contents && data.contents.length > 200) {
+      if (data?.contents && data.contents.length > 200 && !isSpaShell(data.contents)) {
         updateLayer(0, "success");
         const md = cleanHtmlToMarkdown(data.contents, url, 1);
         return makeResult(md);
@@ -108,10 +130,10 @@ export async function scrapeUrl(
   // Layer 2 — CorsProxy.io
   updateLayer(1, "trying");
   try {
-    const res = await fetch(`https://corsproxy.io/?${encodedURL}`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`https://corsproxy.io/?${encodedURL}`, { signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const html = await res.text();
-      if (html && html.length > 200) {
+      if (html && html.length > 200 && !isSpaShell(html)) {
         updateLayer(1, "success");
         const md = cleanHtmlToMarkdown(html, url, 2);
         return makeResult(md);
@@ -123,10 +145,10 @@ export async function scrapeUrl(
   // Layer 3 — CodeTabs
   updateLayer(2, "trying");
   try {
-    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodedURL}`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodedURL}`, { signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const html = await res.text();
-      if (html && html.length > 200) {
+      if (html && html.length > 200 && !isSpaShell(html)) {
         updateLayer(2, "success");
         const md = cleanHtmlToMarkdown(html, url, 3);
         return makeResult(md);
@@ -135,12 +157,16 @@ export async function scrapeUrl(
   } catch {}
   updateLayer(2, "failed");
 
-  // Layer 4 — Jina Reader
+  // Layer 4 — Jina Reader (best for JS-heavy SPAs — renders JS server-side)
   updateLayer(3, "trying");
   try {
     const res = await fetch(`https://r.jina.ai/${url}`, {
-      headers: { "Accept": "text/markdown,text/plain,*/*" },
-      signal: AbortSignal.timeout(15000),
+      headers: {
+        "Accept": "text/markdown,text/plain,*/*",
+        "X-Return-Format": "markdown",
+        "X-No-Cache": "true",
+      },
+      signal: AbortSignal.timeout(30000), // Jina needs more time for JS rendering
     });
     if (res.ok) {
       const text = await res.text();
