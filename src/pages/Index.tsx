@@ -9,12 +9,15 @@ type AppState = "idle" | "loading" | "success" | "error";
 
 const LOADING_MESSAGES = [
   "Fetching URL...",
-  "Trying proxy layer 1...",
+  "Trying AllOrigins proxy...",
+  "Trying ThingProxy...",
+  "Trying CodeTabs proxy...",
+  "Running Jina AI reader...",
+  "Checking Google Cache...",
+  "Checking Wayback Machine...",
+  "Trying 12ft.io bypass...",
+  "Final fallback attempt...",
   "Cleaning HTML...",
-  "Trying proxy layer 2...",
-  "Parsing content...",
-  "Trying proxy layer 3...",
-  "Running through Jina AI...",
   "Rendering Markdown...",
 ];
 
@@ -100,7 +103,7 @@ export default function Index() {
       addHistory(scrapeUrl_, title);
     } catch (e) {
       stopLoadingMessages();
-      setErrorMsg("All scraping layers failed. The site may block scrapers, use bot protection, or require authentication.");
+      setErrorMsg("All 8 scraping layers failed — including Google Cache, Wayback Machine, Jina AI, and 12ft.io bypass. The site enforces strict bot protection.");
       setAppState("error");
     }
   }, [url]);
@@ -184,7 +187,7 @@ export default function Index() {
               <span className="gradient-text">Get clean Markdown instantly.</span>
             </h2>
             <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              5-layer scraping engine · HTML cleaner · Jina AI reader · One-click download
+              8-layer scraping engine · Bot bypass · Jina AI · Google Cache · Wayback Machine
             </p>
           </div>
         )}
